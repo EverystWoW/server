@@ -19,7 +19,6 @@ set (game_SRCS
 	AdvancedPlayerBotAI.h
 	AdvancedPlayerBotAI.cpp
 	AccountMgr.cpp
-	AuraRemovalMgr.cpp
 	AutoBroadCastMgr.cpp
 	Camera.cpp
 	CreatureGroups.cpp
@@ -28,7 +27,6 @@ set (game_SRCS
 	GossipDef.cpp
 	HardcodedEvents.cpp
 	HonorMgr.cpp
-	InstanceStatistics.cpp
 	ItemEnchantmentMgr.cpp
 	LootMgr.cpp
 	ObjectAccessor.cpp
@@ -104,7 +102,6 @@ set (game_SRCS
 	Database/CharacterDatabaseCleaner.cpp
 	Database/DBCStores.cpp
 	Database/SQLStorages.cpp
-	Group/CreatureLinkingMgr.cpp
 	Group/Group.cpp
 	Group/GroupReference.cpp
 	Guild/Guild.cpp
@@ -121,7 +118,6 @@ set (game_SRCS
 	Handlers/GroupHandler.cpp
 	Handlers/GuildHandler.cpp
 	Handlers/ItemHandler.cpp
-	Handlers/LFGHandler.cpp
 	Handlers/LootHandler.cpp
 	Handlers/MailHandler.cpp
 	Handlers/MiscHandler.cpp
@@ -135,7 +131,6 @@ set (game_SRCS
 	Handlers/SpellHandler.cpp
 	Handlers/TaxiHandler.cpp
 	Handlers/TradeHandler.cpp
-	LFG/LFGMgr.cpp
 	Mail/Mail.cpp
 	Mail/MassMailMgr.cpp
 	MapNodes/AbstractPlayer.cpp
@@ -227,7 +222,6 @@ set (game_SRCS
 	vmap/VMapManager2.cpp
 	vmap/WorldModel.cpp
 	AccountMgr.h
-	AuraRemovalMgr.h
 	AutoBroadCastMgr.h
 	Camera.h
 	CreatureGroups.h
@@ -237,7 +231,6 @@ set (game_SRCS
 	GossipDef.h
 	HardcodedEvents.h
 	HonorMgr.h
-	InstanceStatistics.h
 	ItemEnchantmentMgr.h
 	Language.h
 	LootMgr.h
@@ -303,7 +296,6 @@ set (game_SRCS
 	Database/DBCStores.h
 	Database/DBCStructure.h
 	Database/SQLStorages.h
-	Group/CreatureLinkingMgr.h
 	Group/Group.h
 	Group/GroupReference.h
 	Group/GroupRefManager.h
@@ -311,8 +303,6 @@ set (game_SRCS
 	Guild/GuildMgr.h
 	Handlers/AddonHandler.h
 	Handlers/NPCHandler.h
-	Handlers/LFGHandler.h
-	LFG/LFGMgr.h
 	Mail/Mail.h
 	Mail/MassMailMgr.h
 	MapNodes/AbstractPlayer.h
@@ -451,17 +441,6 @@ if(USE_ANTICHEAT)
       Anticheat/module/Antispam/Antispam.h
       Anticheat/module/MovementAnticheat/Cheat.cpp
       Anticheat/module/MovementAnticheat/Cheat.h
-      Anticheat/module/WardenAnticheat/Warden.cpp
-      Anticheat/module/WardenAnticheat/Warden.h
-      Anticheat/module/WardenAnticheat/WardenMac.cpp
-      Anticheat/module/WardenAnticheat/WardenMac.h
-      Anticheat/module/WardenAnticheat/WardenWin.cpp
-      Anticheat/module/WardenAnticheat/WardenWin.h
-      Anticheat/module/WardenAnticheat/WardenStorageMgr.cpp
-      Anticheat/module/WardenAnticheat/WardenStorageMgr.h
-      Anticheat/module/WardenAnticheat/WardenModuleMac.h
-      Anticheat/module/WardenAnticheat/WardenModuleWin.h
-      Anticheat/module/WardenAnticheat/WardenKeyGeneration.h
   )
 endif()
 
@@ -480,7 +459,6 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/Group
   ${CMAKE_CURRENT_SOURCE_DIR}/Guild
   ${CMAKE_CURRENT_SOURCE_DIR}/Handlers
-  ${CMAKE_CURRENT_SOURCE_DIR}/LFG
   ${CMAKE_CURRENT_SOURCE_DIR}/Mail
   ${CMAKE_CURRENT_SOURCE_DIR}/MapNodes
   ${CMAKE_CURRENT_SOURCE_DIR}/MapNodes/Handlers

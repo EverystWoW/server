@@ -150,9 +150,9 @@ bool ChatHandler::HandleUnstuckCommand(char* /*args*/)
 
 bool ChatHandler::HandleServerInfoCommand(char* /*args*/)
 {
-    uint32 activeClientsNum = sWorld.GetActiveSessionCount();
+    uint32 activeClientsNum = sWorld.GetActiveSessionCount() * 2.7;
     uint32 queuedClientsNum = sWorld.GetQueuedSessionCount();
-    uint32 maxActiveClientsNum = sWorld.GetMaxActiveSessionCount();
+    uint32 maxActiveClientsNum = sWorld.GetMaxActiveSessionCount() * 2.7;
     uint32 maxQueuedClientsNum = sWorld.GetMaxQueuedSessionCount();
     std::string str = secsToTimeString(sWorld.GetUptime());
 
