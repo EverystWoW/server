@@ -1180,7 +1180,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
                 // can cause back attack (if detected)
                 bool backAttack = m_spellInfo->Id != 3600 && // Earthbind never set in combat
                     !IsPositiveSpell(m_spellInfo->Id) && m_caster->isVisibleForOrDetect(unit, unit, false);
-                if (IsSpellHaveAura(m_spellInfo, SPELL_AURA_MOD_POSSESS))
+                if (IsSpellHaveAura(m_spellInfo, SPELL_AURA_MOD_POSSESS) || m_spellInfo->AttributesEx3 & SPELL_ATTR_EX3_NO_INITIAL_AGGRO)
                     backAttack = false;
                 // Pickpocket can cause back attack if failed
                 if (m_spellInfo->AttributesEx & SPELL_ATTR_EX_IS_PICKPOCKET)
@@ -3551,7 +3551,7 @@ void Spell::cast(bool skipCheck)
     {
         uint32 procAttacker = 0;
         // Blizzard case. Should trigger at launch for clearcast.
-        if (m_spellInfo->IsFitToFamily<SPELLFAMILY_MAGE, CF_MAGE_BLIZZARD, CF_MAGE_MISC_FROST>())
+        if (m_spellInfo->IsFitToFamily<SPELLFAMILY_MAGE, CF_MAGE_BLIZZARD>())
             procAttacker = m_procAttacker;
         else
             procAttacker = (m_procAttacker & PROC_FLAG_ON_TRAP_ACTIVATION);
@@ -5200,6 +5200,11 @@ SpellCastResult Spell::CheckCast(bool strict)
                 if (m_targets.getUnitTargetGuid() != m_caster->GetReactiveTraget(REACTIVE_HUNTER_PARRY))
                     return SPELL_FAILED_BAD_TARGETS;
                 break;
+            // Reindeer Transformation only castable while mounted
+            case 25860:
+                if (!m_caster->HasAuraType(SPELL_AURA_MOUNTED))
+                    return SPELL_FAILED_ONLY_MOUNTED;
+                break; 
         }
 
         // Loatheb Corrupted Mind spell failed

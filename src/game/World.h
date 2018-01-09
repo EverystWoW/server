@@ -34,6 +34,7 @@
 #include "Commands/Nostalrius.h"
 #include "ObjectGuid.h"
 #include "MapNodes/AbstractPlayer.h"
+#include "WorldPacket.h"
 
 #include <map>
 #include <set>
@@ -43,7 +44,6 @@
 #include <unordered_map>
 
 class Object;
-class WorldPacket;
 class WorldSession;
 class Player;
 class Weather;
@@ -263,6 +263,7 @@ enum eConfigUInt32Values
     CONFIG_UINT32_RESPEC_MAX_MULTIPLIER,
     CONFIG_UINT32_BATTLEGROUND_GROUP_LIMIT,
     CONFIG_UINT32_CREATURE_SUMMON_LIMIT,
+    CONFIG_UINT32_WAR_EFFORT_AUTOCOMPLETE_PERIOD,
     CONFIG_UINT32_VALUE_COUNT
 };
 
@@ -534,6 +535,16 @@ public:
     virtual void run() = 0;
 };
 
+class SessionPacketSendTask : public AsyncTask
+{
+public:
+    SessionPacketSendTask(uint32 accountId, WorldPacket& data) : m_accountId(accountId), m_data(data) {}
+    void run() override;
+private:
+    uint32 m_accountId;
+    WorldPacket m_data;
+};
+
 struct TransactionPart
 {
     static const int MAX_TRANSACTION_ITEMS = 6;
@@ -762,13 +773,13 @@ class World
         uint32 GetAnticrashRearmTimer() const { return m_anticrashRearmTimer; }
 
         /**
-         * These async tasks should be added from THREADUNSAFE opcode handlers (since AddAsyncTask is *not* threadsafe)
+         * Async tasks, allow safe access to sessions (but not players themselves)
          * The tasks will be executed *while* maps are updated. So don't touch the mobs, pets, etc ...
+         * includes reading, unless the read itself is serialized
          */
-        void AddAsyncTask(AsyncTask* task) { _asyncTasks.push_back(task); }
-        void HandleAsyncTasks(int currThreadIdx, int threadsCount);
-        typedef std::vector<AsyncTask*> AsyncTaskVect;
-        AsyncTaskVect _asyncTasks;
+        void AddAsyncTask(AsyncTask* task) { _asyncTasks.add(task); }
+        bool GetNextAsyncTask(AsyncTask*& task) { return _asyncTasks.next(task); }
+        ACE_Based::LockedQueue<AsyncTask*, ACE_Thread_Mutex> _asyncTasks;
         /**
          * Database logs system
          */

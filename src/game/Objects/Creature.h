@@ -74,6 +74,7 @@ enum CreatureFlagsExtra
 
 #define MAX_KILL_CREDIT 2
 #define MAX_CREATURE_MODEL 4                                // only single send to client in static data
+#define CREATURE_FLEE_TEXT 1150
 
 // from `creature_template` table
 struct CreatureInfo
@@ -652,6 +653,7 @@ class MANGOS_DLL_SPEC Creature : public Unit
 
         void SendAIReaction(AiReaction reactionType);
 
+        void DoFlee();
         void DoFleeToGetAssistance();
         float GetFleeingSpeed() const;
         void CallForHelp(float fRadius);
@@ -677,6 +679,7 @@ class MANGOS_DLL_SPEC Creature : public Unit
         bool IsDeadByDefault() const { return m_isDeadByDefault; };
 
         void ForcedDespawn(uint32 timeMSToDespawn = 0);
+        void DespawnOrUnsummon(uint32 msTimeToDespawn = 0);
 
         time_t const& GetRespawnTime() const { return m_respawnTime; }
         time_t GetRespawnTimeEx() const;

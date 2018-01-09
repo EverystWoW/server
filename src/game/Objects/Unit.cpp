@@ -3103,10 +3103,6 @@ SpellMissInfo Unit::SpellHitResult(Unit *pVictim, SpellEntry const *spell, Spell
     if (IsPositiveSpell(spell->Id, this, pVictim) || IsPositiveEffect(spell, effIndex, this, pVictim))
         return SPELL_MISS_NONE;
 
-    // Farsight spells can't miss
-    if (spell->AttributesEx & SPELL_ATTR_EX_FARSIGHT)
-        return SPELL_MISS_NONE;
-
     // Check for immune (use charges)
     SpellSchoolMask schoolMask;
     if (spellPtr)
@@ -3275,8 +3271,13 @@ float Unit::GetUnitParryChance() const
     }
     else if (GetTypeId() == TYPEID_UNIT)
     {
-        chance = 5.0f;
-        chance += GetTotalAuraModifier(SPELL_AURA_MOD_PARRY_PERCENT);
+        // Can't really know for sure, but Totems probably shouldn't parry.
+        // They are inanimate objects, have no arms nor weapons, and cannot move.
+        if (GetCreatureType() != CREATURE_TYPE_TOTEM)
+        {
+            chance = 5.0f;
+            chance += GetTotalAuraModifier(SPELL_AURA_MOD_PARRY_PERCENT);
+        }
     }
 
     return chance > 0.0f ? chance : 0.0f;

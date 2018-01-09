@@ -221,47 +221,6 @@ const uint32 HordeSoldierId[3] =
 ## npc_doctor (handles both Gustaf Vanhowzen and Gregory Victor)
 ######*/
 
-bool GossipHello_npc_doctor(Player* pPlayer, Creature* pCreature)
-{
-    if (pCreature->isQuestGiver())
-        pPlayer->PrepareQuestMenu(pCreature->GetObjectGuid());
-
-    if ((pPlayer->GetTeam() == ALLIANCE && pPlayer->GetQuestStatus(QUEST_TRIAGE_A) == QUEST_STATUS_COMPLETE) || (pPlayer->GetTeam() == HORDE && pPlayer->GetQuestStatus(QUEST_TRIAGE_H) == QUEST_STATUS_COMPLETE))
-    {
-        if (pPlayer->GetSkillValue(SKILL_FIRST_AID) >= 240 && !pPlayer->HasSpell(10841))
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, -3100005, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
-        if (pPlayer->GetSkillValue(SKILL_FIRST_AID) >= 260 && !pPlayer->HasSpell(18629))
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, -3100006, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
-        if (pPlayer->GetSkillValue(SKILL_FIRST_AID) >= 290 && !pPlayer->HasSpell(18630))
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, -3100007, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
-    }
-
-    pPlayer->SEND_GOSSIP_MENU(pPlayer->GetGossipTextId(pCreature), pCreature->GetObjectGuid());
-    return true;
-}
-
-bool GossipSelect_npc_doctor(Player* pPlayer, Creature* pCreature, uint32 uiSender, uint32 uiAction)
-{
-    pPlayer->PlayerTalkClass->ClearMenus();
-
-    switch (uiAction)
-    {
-    case GOSSIP_ACTION_INFO_DEF + 1:
-        pPlayer->CastSpell(pPlayer, 10843, true);
-        pPlayer->CLOSE_GOSSIP_MENU();
-        break;
-    case GOSSIP_ACTION_INFO_DEF + 2:
-        pPlayer->CastSpell(pPlayer, 18631, true);
-        pPlayer->CLOSE_GOSSIP_MENU();
-        break;
-    case GOSSIP_ACTION_INFO_DEF + 3:
-        pPlayer->CastSpell(pPlayer, 18632, true);
-        pPlayer->CLOSE_GOSSIP_MENU();
-        break;
-    }
-    return true;
-}
-
 struct npc_doctorAI : public ScriptedAI
 {
     npc_doctorAI(Creature* pCreature) : ScriptedAI(pCreature)
@@ -2251,9 +2210,7 @@ enum TargetDummyEntry
 struct npc_target_dummyAI : ScriptedAI
 {
     uint32 m_uiStayTime;
-    uint32 m_uiAggroTimer;
     bool m_bActive;
-    bool m_bIsAggro;
     TargetDummySpells m_spawnEffect;
     TargetDummySpells m_passiveSpell;
 
@@ -2261,7 +2218,7 @@ struct npc_target_dummyAI : ScriptedAI
     {
         m_bActive = true;
         m_uiStayTime = TARGET_DUMMY_DURATION;
-        m_creature->addUnitState(UNIT_STAT_ROOT);
+        SetCombatMovement(false);
 
         switch (m_creature->GetEntry())
         {
@@ -2286,13 +2243,13 @@ struct npc_target_dummyAI : ScriptedAI
             }
         }
 
+        m_creature->AddAura(m_passiveSpell, ADD_AURA_PERMANENT);
         DoCastSpellIfCan(m_creature, m_spawnEffect, false);
     }
 
     void Reset() override
     {
-        m_bIsAggro = false;
-        m_uiAggroTimer = 3000;
+        
     }
 
     void Aggro(Unit* /*pWho*/) override
@@ -2318,22 +2275,6 @@ struct npc_target_dummyAI : ScriptedAI
 
         if (!m_creature->SelectHostileTarget() || !m_creature->getVictim())
             return;
-
-        m_creature->SetDefaultMovementType(IDLE_MOTION_TYPE);
-
-        if (!m_creature->hasUnitState(UNIT_STAT_ROOT))
-            m_creature->addUnitState(UNIT_STAT_ROOT);
-
-        if (m_uiAggroTimer < diff)
-        {
-            if (DoCastSpellIfCan(m_creature->getVictim(), m_passiveSpell, false) == CAST_OK)
-            {
-                m_uiAggroTimer = 3000;
-                m_bIsAggro = true;
-            }
-        }
-        else
-            m_uiAggroTimer -= diff;
     }
 };
 
@@ -2507,7 +2448,7 @@ struct npc_goblin_land_mineAI : ScriptedAI
 
     void Reset() override
     {
-        m_creature->GetMotionMaster()->MoveIdle();
+        SetCombatMovement(false);
     }
 
     void MoveInLineOfSight(Unit* pWho) override
@@ -3537,8 +3478,6 @@ void AddSC_npcs_special()
     newscript->GetAI = &GetAI_npc_doctor;
     newscript->pQuestAcceptNPC = &QuestAccept_npc_doctor;
     newscript->pQuestRewardedNPC = &QuestRewarded_npc_doctor;
-    newscript->pGossipHello = &GossipHello_npc_doctor;
-    newscript->pGossipSelect = &GossipSelect_npc_doctor;
     newscript->RegisterSelf();
 
     newscript = new Script;

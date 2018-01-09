@@ -89,6 +89,49 @@ struct BattlegroundEntranceTrigger
     float  exit_Orientation;
 };
 
+struct BroadcastText
+{
+    BroadcastText() : Id(0), SoundId(0), Type(0), Language(0), EmoteId0(0), EmoteId1(0), EmoteId2(0),
+        EmoteDelay0(0), EmoteDelay1(0), EmoteDelay2(0)
+    {
+        MaleText.resize(LOCALE_enUS + 1);
+        FemaleText.resize(LOCALE_enUS + 1);
+    }
+
+    uint32 Id;
+    std::vector<std::string> MaleText;
+    std::vector<std::string> FemaleText;
+    uint32 SoundId;
+    uint8  Type;
+    uint32 Language;
+    uint32 EmoteId0;
+    uint32 EmoteId1;
+    uint32 EmoteId2;
+    uint32 EmoteDelay0;
+    uint32 EmoteDelay1;
+    uint32 EmoteDelay2;
+
+    std::string const& GetText(int locale_index, uint8 gender, bool forceGender) const
+    {
+        if ((gender == GENDER_FEMALE || gender == GENDER_NONE) && (forceGender || !FemaleText[LOCALE_enUS].empty()))
+        {
+            if ((int32)FemaleText.size() > locale_index + 1 && !FemaleText[locale_index + 1].empty())
+                return FemaleText[locale_index + 1];
+            else
+                return FemaleText[0];
+        }
+        // else if (gender == GENDER_MALE)
+        {
+            if ((int32)MaleText.size() > locale_index + 1 && !MaleText[locale_index + 1].empty())
+                return MaleText[locale_index + 1];
+            else
+                return MaleText[0];
+        }
+    }
+};
+
+typedef std::unordered_map<uint32, BroadcastText> BroadcastTextLocaleMap;
+
 typedef std::map<uint32/*player guid*/,uint32/*instance*/> CellCorpseSet;
 struct CellObjectGuids
 {
@@ -102,9 +145,7 @@ typedef UNORDERED_MAP<uint32/*mapid*/,CellObjectGuidsMap> MapObjectGuids;
 // mangos string ranges
 #define MIN_MANGOS_STRING_ID           1                    // 'mangos_string'
 #define MAX_MANGOS_STRING_ID           2000000000
-#define MIN_DB_SCRIPT_STRING_ID        MAX_MANGOS_STRING_ID // 'db_script_string'
-#define MAX_DB_SCRIPT_STRING_ID        2000010000
-#define MIN_NOSTALRIUS_STRING_ID       MAX_DB_SCRIPT_STRING_ID
+#define MIN_NOSTALRIUS_STRING_ID       2000010000
 #define MAX_NOSTALRIUS_STRING_ID       2000090000
 #define MIN_CREATURE_AI_TEXT_STRING_ID (-1)                 // 'creature_ai_texts'
 #define MAX_CREATURE_AI_TEXT_STRING_ID (-1200000)
@@ -186,7 +227,6 @@ typedef UNORDERED_MAP<uint32,CreatureLocale> CreatureLocaleMap;
 typedef UNORDERED_MAP<uint32,GameObjectLocale> GameObjectLocaleMap;
 typedef UNORDERED_MAP<uint32,ItemLocale> ItemLocaleMap;
 typedef UNORDERED_MAP<uint32,QuestLocale> QuestLocaleMap;
-typedef UNORDERED_MAP<uint32,NpcTextLocale> NpcTextLocaleMap;
 typedef UNORDERED_MAP<uint32,PageTextLocale> PageTextLocaleMap;
 typedef UNORDERED_MAP<int32,MangosStringLocale> MangosStringLocaleMap;
 typedef UNORDERED_MAP<uint32,QuestGreetingLocale> QuestGreetingLocaleMap;
@@ -256,6 +296,7 @@ struct GossipMenuItems
     uint32          id;
     uint8           option_icon;
     std::string     option_text;
+    uint32          OptionBroadcastTextID;
     uint32          option_id;
     uint32          npc_option_npcflag;
     int32           action_menu_id;
@@ -263,6 +304,7 @@ struct GossipMenuItems
     uint32          action_script_id;
     bool            box_coded;
     std::string     box_text;
+    uint32          BoxBroadcastTextID;
     uint16          conditionId;
 };
 
@@ -407,7 +449,7 @@ class PlayerCondition
 
 // NPC gossip text id
 typedef UNORDERED_MAP<uint32, uint32> CacheNpcTextIdMap;
-
+typedef UNORDERED_MAP<uint32, NpcText> NpcTextMap;
 typedef UNORDERED_MAP<uint32, VendorItemData> CacheVendorItemMap;
 typedef UNORDERED_MAP<uint32, TrainerSpellData> CacheTrainerSpellMap;
 
@@ -476,7 +518,13 @@ struct PlayerCacheData
     uint32 uiClass;
     uint32 uiGender;
     uint32 uiZoneId;
+    uint32 uiMapId;
     std::string sName;
+    float fPosX;
+    float fPosY;
+    float fPosZ;
+    float fOrientation;
+    bool bInFlight;
 };
 typedef std::map<uint32 /*guid*/, PlayerCacheData*> PlayerCacheDataMap;
 
@@ -668,6 +716,7 @@ class ObjectMgr
         Team GetPlayerTeamByGUID(ObjectGuid guid) const;
         uint32 GetPlayerAccountIdByGUID(ObjectGuid guid) const;
         uint32 GetPlayerAccountIdByPlayerName(const std::string& name) const;
+        uint8 GetPlayerClassByGUID(ObjectGuid guid) const;
 
         uint32 GetNearestTaxiNode( float x, float y, float z, uint32 mapid, Team team );
         void GetTaxiPath( uint32 source, uint32 destination, uint32 &path, uint32 &cost);
@@ -702,8 +751,6 @@ class ObjectMgr
         }
 
         static char* const GetPatchName();
-
-        GossipText const* GetGossipText(uint32 Text_ID) const;
 
         WorldSafeLocsEntry const *GetClosestGraveYard(float x, float y, float z, uint32 MapId, Team team);
         bool AddGraveYardLink(uint32 id, uint32 zone, Team team, bool inDB = true);
@@ -789,6 +836,8 @@ class ObjectMgr
         bool LoadMangosStrings(DatabaseType& db, char const* table, int32 min_value, int32 max_value, bool extra_content);
         bool LoadMangosStrings() { return LoadMangosStrings(WorldDatabase,"mangos_string",MIN_MANGOS_STRING_ID,MAX_MANGOS_STRING_ID, false); }
         bool LoadNostalriusStrings();
+        void LoadBroadcastTexts();
+        void LoadBroadcastTextLocales();
         bool LoadQuestGreetings();
         void LoadPetCreateSpells();
         void LoadCreatureLocales();
@@ -805,7 +854,6 @@ class ObjectMgr
         void LoadItemRequiredTarget();
         void LoadItemLocales();
         void LoadQuestLocales();
-        void LoadGossipTextLocales();
         void LoadPageTextLocales();
         void LoadGossipMenuItemsLocales();
         void LoadPointOfInterestLocales();
@@ -814,7 +862,7 @@ class ObjectMgr
         void LoadAreaTemplate();
         void LoadAreaLocales();
 
-        void LoadGossipText();
+        void LoadNPCText();
 
         void LoadAreaTriggerTeleports();
         void LoadQuestAreaTriggers();
@@ -971,10 +1019,10 @@ class ObjectMgr
             return &itr->second;
         }
 
-        NpcTextLocale const* GetNpcTextLocale(uint32 entry) const
+        NpcText const* GetNpcText(uint32 entry) const
         {
-            auto itr = mNpcTextLocaleMap.find(entry);
-            if(itr==mNpcTextLocaleMap.end()) return nullptr;
+            auto itr = mNpcTextMap.find(entry);
+            if(itr==mNpcTextMap.end()) return nullptr;
             return &itr->second;
         }
 
@@ -1030,6 +1078,16 @@ class ObjectMgr
                 if (worker(*itr))                           // arg = GameObjectDataPair
                     break;
         }
+
+        BroadcastText const* GetBroadcastTextLocale(uint32 id) const
+        {
+            BroadcastTextLocaleMap::const_iterator itr = mBroadcastTextLocaleMap.find(id);
+            if (itr != mBroadcastTextLocaleMap.end())
+                return &itr->second;
+            return nullptr;
+        }
+
+        const char *GetBroadcastText(uint32 id, int locale_idx = LOCALE_enUS, uint8 gender = GENDER_MALE, bool forceGender = false) const;
 
         MangosStringLocale const* GetMangosStringLocale(int32 entry) const
         {
@@ -1204,12 +1262,18 @@ class ObjectMgr
 
         // Caching Player Data
         void LoadPlayerCacheData();
-        PlayerCacheData* GetPlayerDataByGUID(uint32 lowGuid);
-        PlayerCacheData* GetPlayerDataByName(const std::string& name);
-        void InsertPlayerInCache(Player *pPlayer);
-        void InsertPlayerInCache(uint32 lowGuid, uint32 race, uint32 _class, uint32 uiGender, uint32 account, const std::string& name, uint32 level, uint32 zoneId);
+        PlayerCacheData* GetPlayerDataByGUID(uint32 lowGuid) const;
+        PlayerCacheData* GetPlayerDataByName(const std::string& name) const;
+        void GetPlayerDataForAccount(uint32 accountId, std::list<PlayerCacheData*>& data) const;
+        PlayerCacheData* InsertPlayerInCache(Player *pPlayer);
+        PlayerCacheData* InsertPlayerInCache(uint32 lowGuid, uint32 race, uint32 _class, uint32 uiGender, uint32 account, const std::string& name, uint32 level, uint32 zoneId);
         void DeletePlayerFromCache(uint32 lowGuid);
         void ChangePlayerNameInCache(uint32 lowGuid, const std::string& oldName, const std::string& newName);
+        void UpdatePlayerCachedPosition(Player *pPlayer);
+        void UpdatePlayerCachedPosition(uint32 lowGuid, uint32 mapId, float posX, float posY, float posZ, float o, bool inFlight);
+        void UpdatePlayerCachedPosition(PlayerCacheData* data, uint32 mapId, float posX, float posY, float posZ, float o, bool inFlight);
+        void UpdatePlayerCache(Player* pPlayer);
+        void UpdatePlayerCache(PlayerCacheData* data, uint32 race, uint32 _class, uint32 gender, uint32 accountId, const std::string& name, uint32 level, uint32 zoneId);
 
         PlayerCacheDataMap m_playerCacheData;
         std::map<std::string, uint32> m_playerNameToGuid;
@@ -1288,7 +1352,6 @@ class ObjectMgr
 
         QuestMap            mQuestTemplates;
 
-        typedef UNORDERED_MAP<uint32, GossipText> GossipTextMap;
         typedef UNORDERED_MAP<uint32, uint32> QuestAreaTriggerMap;
         typedef UNORDERED_MAP<uint32, std::string> ItemTextMap;
         // Map quest_id->id of start item
@@ -1303,7 +1366,6 @@ class ObjectMgr
         QuestAreaTriggerMap mQuestAreaTriggerMap;
         TavernAreaTriggerSet mTavernAreaTriggerSet;
         GameObjectForQuestSet mGameObjectForQuestSet;
-        GossipTextMap       mGossipText;
         AreaTriggerMap      mAreaTriggers;
         QuestStartingItemMap   mQuestStartingItems;
         BGEntranceTriggerMap mBGEntranceTriggers;
@@ -1382,9 +1444,10 @@ class ObjectMgr
         GameObjectLocaleMap mGameObjectLocaleMap;
         ItemLocaleMap mItemLocaleMap;
         QuestLocaleMap mQuestLocaleMap;
-        NpcTextLocaleMap mNpcTextLocaleMap;
+        NpcTextMap mNpcTextMap;
         PageTextLocaleMap mPageTextLocaleMap;
         MangosStringLocaleMap mMangosStringLocaleMap;
+        BroadcastTextLocaleMap mBroadcastTextLocaleMap;
         QuestGreetingLocaleMap mQuestGreetingLocaleMap[QUESTGIVER_TYPE_MAX];
         GossipMenuItemsLocaleMap mGossipMenuItemsLocaleMap;
         PointOfInterestLocaleMap mPointOfInterestLocaleMap;

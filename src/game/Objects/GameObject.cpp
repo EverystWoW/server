@@ -190,6 +190,7 @@ bool GameObject::Create(uint32 guidlow, uint32 name_id, Map *map, float x, float
     SetGoType(GameobjectTypes(goinfo->type));
 
     SetGoAnimProgress(animprogress);
+    SetName(goinfo->name);
 
     //Notify the map's instance data.
     //Only works if you create the object in it, not if it is moves to that map.
@@ -1859,6 +1860,10 @@ void GameObject::Use(Unit* user)
         return;
     }
 
+    // NOTE: Some of the spells used by GOs are considered triggered, but have cast times.
+    // Ensure that the spell you are using, and any event it may trigger, is checking
+    // pointer validity (i.e. instance, GO, etc) since the caster may have moved maps
+    // or the GO might be gone by the time the spell is executed.
     Spell *spell = new Spell(spellCaster, spellInfo, triggered, GetObjectGuid());
 
     SpellCastTargets targets;

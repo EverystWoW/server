@@ -398,20 +398,21 @@ ChatCommand * ChatHandler::getCommandTable()
 
     static ChatCommand lookupAccountCommandTable[] =
     {
-        { NODE, "email",          SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupAccountEmailCommand,     "", nullptr },
-        { NODE, "ip",             SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupAccountIpCommand,        "", nullptr },
-        { NODE, "iponline",       SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupAccountIponlineCommand,  "", nullptr },
-        { NODE, "name",           SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupAccountNameCommand,      "", nullptr },
+        { NODE, "email",          SEC_GAMEMASTER,     false,  &ChatHandler::HandleLookupAccountEmailCommand,     "", nullptr },
+        { NODE, "ip",             SEC_GAMEMASTER,     false,  &ChatHandler::HandleLookupAccountIpCommand,        "", nullptr },
+        { NODE, "iponline",       SEC_GAMEMASTER,     false,  &ChatHandler::HandleLookupAccountIponlineCommand,  "", nullptr },
+        { NODE, "name",           SEC_GAMEMASTER,     false,  &ChatHandler::HandleLookupAccountNameCommand,      "", nullptr },
         { MSTR, nullptr,          0,                  false, nullptr,                                           "", nullptr }
     };
 
+    // TODO: Add console output support to async player lookups
     static ChatCommand lookupPlayerCommandTable[] =
     {
-        { NODE, "account",        SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupPlayerAccountCommand,   "", nullptr },
-        { NODE, "email",          SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupPlayerEmailCommand,     "", nullptr },
-        { NODE, "ip",             SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupPlayerIpCommand,        "", nullptr },
-        { NODE, "name",           SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupPlayerNameCommand,      "", nullptr },
-        { NODE, "character",      SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupPlayerCharacterCommand, "", nullptr },
+        { NODE, "account",        SEC_GAMEMASTER,     false,  &ChatHandler::HandleLookupPlayerAccountCommand,   "", nullptr },
+        { NODE, "email",          SEC_GAMEMASTER,     false,  &ChatHandler::HandleLookupPlayerEmailCommand,     "", nullptr },
+        { NODE, "ip",             SEC_GAMEMASTER,     false,  &ChatHandler::HandleLookupPlayerIpCommand,        "", nullptr },
+        { NODE, "name",           SEC_GAMEMASTER,     false,  &ChatHandler::HandleLookupPlayerNameCommand,      "", nullptr },
+        { NODE, "character",      SEC_GAMEMASTER,     false,  &ChatHandler::HandleLookupPlayerCharacterCommand, "", nullptr },
         { MSTR, nullptr,       0,                  false, nullptr,                                             "", nullptr }
     };
 
@@ -630,7 +631,6 @@ ChatCommand * ChatHandler::getCommandTable()
         { MSTR, "locales_gameobject",          SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesGameobjectCommand,       "", nullptr },
         { MSTR, "locales_gossip_menu_option",  SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesGossipMenuOptionCommand, "", nullptr },
         { MSTR, "locales_item",                SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesItemCommand,             "", nullptr },
-        { MSTR, "locales_npc_text",            SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesNpcTextCommand,          "", nullptr },
         { MSTR, "locales_page_text",           SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesPageTextCommand,         "", nullptr },
         { MSTR, "locales_points_of_interest",  SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesPointsOfInterestCommand, "", nullptr },
         { MSTR, "locales_quest",               SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesQuestCommand,            "", nullptr },
@@ -696,6 +696,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { MSTR, "ip_banned",                   SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadIPBanList,                      "", nullptr },
         { MSTR, "account_banned",              SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadAccountBanList,                 "", nullptr },
         { MSTR, "instance_buff_removal",       SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadInstanceBuffRemoval,            "", nullptr },
+        { MSTR, "petitions",                   SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadPetitions,                      "", nullptr },
         { MSTR, nullptr,                    0,                 false, nullptr,                                                     "", nullptr }
     };
 
@@ -998,7 +999,7 @@ ChatCommand * ChatHandler::getCommandTable()
 
     static ChatCommand goldCommandTable[] =
     {
-        { MSTR, "remove",            SEC_GAMEMASTER,        true,  &ChatHandler::HandleGoldRemoval,               "", nullptr },
+        { MSTR, "remove",            SEC_GAMEMASTER,        false, &ChatHandler::HandleGoldRemoval,               "", nullptr },
         { MSTR, nullptr,              0,                    false, nullptr,                                       "", nullptr }
     };
 
@@ -1097,7 +1098,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { NODE, "setskill",       SEC_ADMINISTRATOR,  false, &ChatHandler::HandleSetSkillCommand,            "", nullptr },
         { MSTR, "whispers",       SEC_MODERATOR,      false, &ChatHandler::HandleWhispersCommand,            "", nullptr },
         { MSTR, "wr",             SEC_PLAYER,         false, &ChatHandler::HandleWhisperRestrictionCommand,  "", nullptr },
-        { MSTR, "pinfo",          SEC_GAMEMASTER,     true,  &ChatHandler::HandlePInfoCommand,               "", nullptr },
+        { MSTR, "pinfo",          SEC_GAMEMASTER,     false, &ChatHandler::HandlePInfoCommand,               "", nullptr },
         { MSTR, "groupinfo",      SEC_GAMEMASTER,     true,  &ChatHandler::HandleGroupInfoCommand,           "", nullptr },
         { MSTR, "pbcast",         SEC_ADMINISTRATOR,  true,  &ChatHandler::HandlePBCastStatsCommand,         "", pbcastCommandTable },
         { NODE, "addons",         SEC_ADMINISTRATOR,  false, &ChatHandler::HandleListAddonsCommand,          "", nullptr },

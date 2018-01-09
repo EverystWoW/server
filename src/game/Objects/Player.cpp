@@ -6270,32 +6270,42 @@ uint32 Player::GetRankFromDB(ObjectGuid guid)
 uint32 Player::GetZoneIdFromDB(ObjectGuid guid)
 {
     uint32 lowguid = guid.GetCounter();
-    QueryResult *result = CharacterDatabase.PQuery("SELECT zone FROM characters WHERE guid='%u'", lowguid);
-    if (!result)
-        return 0;
-    Field* fields = result->Fetch();
-    uint32 zone = fields[0].GetUInt32();
-    delete result;
-
-    if (!zone)
+    uint32 zone = 0;
+    if (PlayerCacheData* data = sObjectMgr.GetPlayerDataByGUID(guid))
     {
-        // stored zone is zero, use generic and slow zone detection
-        result = CharacterDatabase.PQuery("SELECT map,position_x,position_y,position_z FROM characters WHERE guid='%u'", lowguid);
+        if (data->uiZoneId)
+            zone = data->uiZoneId;
+        else
+            zone = sTerrainMgr.GetZoneId(data->uiMapId, data->fPosX, data->fPosY, data->fPosZ);
+    }
+    else
+    {
+        QueryResult *result = CharacterDatabase.PQuery("SELECT zone FROM characters WHERE guid='%u'", lowguid);
         if (!result)
             return 0;
-        fields = result->Fetch();
-        uint32 map = fields[0].GetUInt32();
-        float posx = fields[1].GetFloat();
-        float posy = fields[2].GetFloat();
-        float posz = fields[3].GetFloat();
+        Field* fields = result->Fetch();
+        zone = fields[0].GetUInt32();
         delete result;
 
-        zone = sTerrainMgr.GetZoneId(map, posx, posy, posz);
+        if (!zone)
+        {
+            // stored zone is zero, use generic and slow zone detection
+            result = CharacterDatabase.PQuery("SELECT map,position_x,position_y,position_z FROM characters WHERE guid='%u'", lowguid);
+            if (!result)
+                return 0;
+            fields = result->Fetch();
+            uint32 map = fields[0].GetUInt32();
+            float posx = fields[1].GetFloat();
+            float posy = fields[2].GetFloat();
+            float posz = fields[3].GetFloat();
+            delete result;
 
-        if (zone > 0)
-            CharacterDatabase.PExecute("UPDATE characters SET zone='%u' WHERE guid='%u'", zone, lowguid);
+            zone = sTerrainMgr.GetZoneId(map, posx, posy, posz);
+
+            if (zone > 0)
+                CharacterDatabase.PExecute("UPDATE characters SET zone='%u' WHERE guid='%u'", zone, lowguid);
+        }
     }
-
     return zone;
 }
 
@@ -6303,15 +6313,22 @@ uint32 Player::GetLevelFromDB(ObjectGuid guid)
 {
     uint32 lowguid = guid.GetCounter();
 
-    QueryResult *result = CharacterDatabase.PQuery("SELECT level FROM characters WHERE guid='%u'", lowguid);
-    if (!result)
-        return 0;
+    if (PlayerCacheData* data = sObjectMgr.GetPlayerDataByGUID(lowguid))
+    {
+        return data->uiLevel;
+    }
+    else
+    {
+        QueryResult *result = CharacterDatabase.PQuery("SELECT level FROM characters WHERE guid='%u'", lowguid);
+        if (!result)
+            return 0;
 
-    Field* fields = result->Fetch();
-    uint32 level = fields[0].GetUInt32();
-    delete result;
+        Field* fields = result->Fetch();
+        uint32 level = fields[0].GetUInt32();
+        delete result;
 
-    return level;
+        return level;
+    }
 }
 
 void Player::DismountCheck()
@@ -10414,6 +10431,8 @@ void Player::MoveItemToInventory(ItemPosCountVec const& dest, Item* pItem, bool 
     }
 }
 
+// It should be assumed that the item is deleted after calling this. No further
+// access to any item pointer referencing the item in this slot can be performed
 void Player::DestroyItem(uint8 bag, uint8 slot, bool update)
 {
     Item *pItem = GetItemByPos(bag, slot);
@@ -10480,9 +10499,18 @@ void Player::DestroyItem(uint8 bag, uint8 slot, bool update)
             pItem->DestroyForPlayer(this);
         }
 
+        // If destroying a charter, destroy the petition too
+        if (pItem->IsCharter())
+        {
+            uint32 petitionId = pItem->GetEnchantmentId(EnchantmentSlot(0));
+            if (Petition* petition = sGuildMgr.GetPetitionById(petitionId))
+                sGuildMgr.DeletePetition(petition);
+        }
+
         //pItem->SetOwnerGUID(0);
         pItem->SetGuidValue(ITEM_FIELD_CONTAINED, ObjectGuid());
         pItem->SetSlot(NULL_SLOT);
+        // NOTE: Will delete the data pointed to by pItem if it is ITEM_NEW
         pItem->SetState(ITEM_REMOVED, this);
     }
 }
@@ -11851,23 +11879,32 @@ void Player::PrepareGossipMenu(WorldObject *pSource, uint32 menuId)
 
         if (hasMenuItem)
         {
-            std::string strOptionText = itr->second.option_text;
-            std::string strBoxText = itr->second.box_text;
-
+            std::string strOptionText, strBoxText;
             int loc_idx = GetSession()->GetSessionDbLocaleIndex();
+
+            if (itr->second.OptionBroadcastTextID)
+                strOptionText = sObjectMgr.GetBroadcastTextLocale(itr->second.OptionBroadcastTextID)->GetText(loc_idx, getGender(), false);
+            else
+                strOptionText = itr->second.option_text;
+
+            if (itr->second.BoxBroadcastTextID)
+                strBoxText = sObjectMgr.GetBroadcastTextLocale(itr->second.BoxBroadcastTextID)->GetText(loc_idx, getGender(), false);
+            else
+                strBoxText = itr->second.box_text;
 
             if (loc_idx >= 0)
             {
                 uint32 idxEntry = MAKE_PAIR32(menuId, itr->second.id);
 
-                if (GossipMenuItemsLocale const *no = sObjectMgr.GetGossipMenuItemsLocale(idxEntry))
-                {
-                    if (no->OptionText.size() > (size_t)loc_idx && !no->OptionText[loc_idx].empty())
-                        strOptionText = no->OptionText[loc_idx];
+                if (!itr->second.OptionBroadcastTextID)
+                    if (GossipMenuItemsLocale const *no = sObjectMgr.GetGossipMenuItemsLocale(idxEntry))
+                        if (no->OptionText.size() > (size_t)loc_idx && !no->OptionText[loc_idx].empty())
+                            strOptionText = no->OptionText[loc_idx];
 
-                    if (no->BoxText.size() > (size_t)loc_idx && !no->BoxText[loc_idx].empty())
-                        strBoxText = no->BoxText[loc_idx];
-                }
+                if (!itr->second.BoxBroadcastTextID)
+                    if (GossipMenuItemsLocale const *no = sObjectMgr.GetGossipMenuItemsLocale(idxEntry))
+                        if (no->BoxText.size() > (size_t)loc_idx && !no->BoxText[loc_idx].empty())
+                            strBoxText = no->BoxText[loc_idx];
             }
 
             if (isGMSkipConditionCheck)
@@ -12233,41 +12270,17 @@ void Player::SendPreparedQuest(ObjectGuid guid)
         {
             uint32 textid = sObjectMgr.GetNpcGossip(pCreature->GetGUIDLow());
 
-            GossipText const* gossiptext = sObjectMgr.GetGossipText(textid);
-            if (gossiptext)
+            NpcText const* gossiptext = sObjectMgr.GetNpcText(textid);
+            if (gossiptext && gossiptext->Options[0].BroadcastTextID)
             {
-                qe = gossiptext->Options[0].Emotes[0];
-
-                if (!gossiptext->Options[0].Text_0.empty())
+                if (BroadcastText const* bct = sObjectMgr.GetBroadcastTextLocale(gossiptext->Options[0].BroadcastTextID))
                 {
-                    title = gossiptext->Options[0].Text_0;
-                    
+                    qe._Emote = bct->EmoteId0;
+                    qe._Delay = bct->EmoteDelay0;
                     int loc_idx = GetSession()->GetSessionDbLocaleIndex();
-                    if (loc_idx >= 0)
-                    {
-                        NpcTextLocale const *nl = sObjectMgr.GetNpcTextLocale(textid);
-                        if (nl)
-                        {
-                            if ((int32)nl->Text_0[0].size() > loc_idx && !nl->Text_0[0][loc_idx].empty())
-                                title = nl->Text_0[0][loc_idx];
-                        }
-                    }
+                    title = bct->GetText(loc_idx, pCreature->getGender(), false);
                 }
-                else
-                {
-                    title = gossiptext->Options[0].Text_1;
-                    
-                    int loc_idx = GetSession()->GetSessionDbLocaleIndex();
-                    if (loc_idx >= 0)
-                    {
-                        NpcTextLocale const *nl = sObjectMgr.GetNpcTextLocale(textid);
-                        if (nl)
-                        {
-                            if ((int32)nl->Text_1[0].size() > loc_idx && !nl->Text_1[0][loc_idx].empty())
-                                title = nl->Text_1[0][loc_idx];
-                        }
-                    }
-                }
+                
             }
         }
         PlayerTalkClass->SendQuestGiverQuestList(qe, title, guid);
@@ -12524,7 +12537,12 @@ bool Player::CanRewardQuest(Quest const *pQuest, uint32 reward, bool msg) const
             InventoryResult res = CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, pQuest->RewChoiceItemId[reward], pQuest->RewChoiceItemCount[reward]);
             if (res != EQUIP_ERR_OK)
             {
-                SendEquipError(res, NULL, NULL, pQuest->RewChoiceItemId[reward]);
+                if (res == EQUIP_ERR_INVENTORY_FULL)
+                    SendQuestFailedAtTaker(pQuest->GetQuestId(), INVALIDREASON_QUEST_FAILED_INVENTORY_FULL);
+                else if (res == EQUIP_ERR_CANT_CARRY_MORE_OF_THIS)
+                    SendQuestFailedAtTaker(pQuest->GetQuestId(), INVALIDREASON_QUEST_FAILED_DUPLICATE_ITEM);
+                else
+                    SendEquipError(res, NULL, NULL, pQuest->RewChoiceItemId[reward]);
                 return false;
             }
         }
@@ -12540,7 +12558,12 @@ bool Player::CanRewardQuest(Quest const *pQuest, uint32 reward, bool msg) const
                 InventoryResult res = CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, pQuest->RewItemId[i], pQuest->RewItemCount[i]);
                 if (res != EQUIP_ERR_OK)
                 {
-                    SendEquipError(res, NULL, NULL);
+                    if (res == EQUIP_ERR_INVENTORY_FULL)
+                        SendQuestFailedAtTaker(pQuest->GetQuestId(), INVALIDREASON_QUEST_FAILED_INVENTORY_FULL);
+                    else if (res == EQUIP_ERR_CANT_CARRY_MORE_OF_THIS)
+                        SendQuestFailedAtTaker(pQuest->GetQuestId(), INVALIDREASON_QUEST_FAILED_DUPLICATE_ITEM);
+                    else
+                        SendEquipError(res, NULL, NULL);
                     return false;
                 }
                 numRewardedItems += dest.size();
@@ -12808,8 +12831,8 @@ void Player::RewardQuest(Quest const *pQuest, uint32 reward, WorldObject* questG
     RemoveTimedQuest(quest_id);
 
     if (BattleGround* bg = GetBattleGround())
-        if (bg->GetTypeID() == BATTLEGROUND_AV)
-            ((BattleGroundAV*)bg)->HandleQuestComplete(questGiver, pQuest->GetQuestId(), this);
+        if ((bg->GetTypeID() == BATTLEGROUND_AV) && (questGiver->GetTypeId() == TYPEID_UNIT))
+            ((BattleGroundAV*)bg)->HandleQuestComplete(questGiver->ToUnit(), pQuest->GetQuestId(), this);
 
     if (pQuest->GetRewChoiceItemsCount() > 0)
     {
@@ -13290,41 +13313,34 @@ bool Player::CanGiveQuestSourceItemIfNeed(Quest const *pQuest, ItemPosCountVec* 
 {
     if (uint32 srcitem = pQuest->GetSrcItemId())
     {
-        
-        if (ItemPrototype const *pProto = ObjectMgr::GetItemPrototype(srcitem))
+        uint32 count = pQuest->GetSrcItemCount();
+
+        // player already have max amount required item (including bank), just report success
+        uint32 has_count = GetItemCount(srcitem, true);
+        if (has_count >= count)
+            return true;
+
+        count -= has_count;                                 // real need amount
+
+        InventoryResult msg;
+        if (!dest)
         {
-            uint32 count = pQuest->GetSrcItemCount();
-            uint32 has_count = GetItemCount(srcitem, true);
+            ItemPosCountVec destTemp;
+            msg = CanStoreNewItem(NULL_BAG, NULL_SLOT, destTemp, srcitem, count);
+        }
+        else
+            msg = CanStoreNewItem(NULL_BAG, NULL_SLOT, *dest, srcitem, count);
 
-            if (pProto->MaxCount && pProto->StartQuest != pQuest->GetQuestId() && (has_count >= pProto->MaxCount))
-            {
-                // player already have max amount of source item (including bank)
+        if (msg == EQUIP_ERR_OK)
+            return true;
+        else
+        {
+            if (msg == EQUIP_ERR_INVENTORY_FULL)
+                SendQuestFailedAtTaker(pQuest->GetQuestId(), INVALIDREASON_QUEST_FAILED_INVENTORY_FULL);
+            else if (msg == EQUIP_ERR_CANT_CARRY_MORE_OF_THIS)
                 SendQuestFailedAtTaker(pQuest->GetQuestId(), INVALIDREASON_QUEST_FAILED_DUPLICATE_ITEM);
-                return false;
-            }
-
-            count -= has_count;                                 // real need amount
-
-            InventoryResult msg;
-            if (!dest)
-            {
-                ItemPosCountVec destTemp;
-                msg = CanStoreNewItem(NULL_BAG, NULL_SLOT, destTemp, srcitem, count);
-            }
             else
-                msg = CanStoreNewItem(NULL_BAG, NULL_SLOT, *dest, srcitem, count);
-
-            if (msg == EQUIP_ERR_OK)
-                return true;
-            else
-            {
-                if (msg == EQUIP_ERR_INVENTORY_FULL)
-                    SendQuestFailedAtTaker(pQuest->GetQuestId(), INVALIDREASON_QUEST_FAILED_INVENTORY_FULL);
-                else if (msg == EQUIP_ERR_CANT_CARRY_MORE_OF_THIS)
-                    SendQuestFailedAtTaker(pQuest->GetQuestId(), INVALIDREASON_QUEST_FAILED_DUPLICATE_ITEM);
-                else
-                    SendEquipError(msg, NULL, NULL, srcitem);
-            }
+                SendEquipError(msg, NULL, NULL, srcitem);
         }
 
         return false;
@@ -13808,7 +13824,8 @@ void Player::TalkedToCreature(uint32 entry, ObjectGuid guid)
 
         if (q_status.m_status == QUEST_STATUS_INCOMPLETE)
         {
-            if (qInfo->HasSpecialFlag(QuestSpecialFlags(QUEST_SPECIAL_FLAG_KILL_OR_CAST | QUEST_SPECIAL_FLAG_SPEAKTO)))
+            if (qInfo->HasSpecialFlag(QuestSpecialFlags(QUEST_SPECIAL_FLAG_KILL_OR_CAST | QUEST_SPECIAL_FLAG_SPEAKTO)) 
+                && !qInfo->HasSpecialFlag(QuestSpecialFlags(QUEST_SPECIAL_FLAG_EXPLORATION_OR_EVENT)))
             {
                 for (int j = 0; j < QUEST_OBJECTIVES_COUNT; ++j)
                 {
@@ -14168,20 +14185,32 @@ void Player::_LoadBGData(QueryResult* result)
 
 bool Player::LoadPositionFromDB(ObjectGuid guid, uint32& mapid, float& x, float& y, float& z, float& o, bool& in_flight)
 {
-    QueryResult *result = CharacterDatabase.PQuery("SELECT position_x,position_y,position_z,orientation,map,taxi_path FROM characters WHERE guid = '%u'", guid.GetCounter());
-    if (!result)
-        return false;
+    if (PlayerCacheData* data = sObjectMgr.GetPlayerDataByGUID(guid.GetCounter()))
+    {
+        x = data->fPosX;
+        y = data->fPosY;
+        z = data->fPosZ;
+        o = data->fOrientation;
+        mapid = data->uiMapId;
+        in_flight = data->bInFlight;
+    }
+    else
+    {
+        QueryResult *result = CharacterDatabase.PQuery("SELECT position_x,position_y,position_z,orientation,map,taxi_path FROM characters WHERE guid = '%u'", guid.GetCounter());
+        if (!result)
+            return false;
 
-    Field *fields = result->Fetch();
+        Field *fields = result->Fetch();
 
-    x = fields[0].GetFloat();
-    y = fields[1].GetFloat();
-    z = fields[2].GetFloat();
-    o = fields[3].GetFloat();
-    mapid = fields[4].GetUInt32();
-    in_flight = !fields[5].GetCppString().empty();
+        x = fields[0].GetFloat();
+        y = fields[1].GetFloat();
+        z = fields[2].GetFloat();
+        o = fields[3].GetFloat();
+        mapid = fields[4].GetUInt32();
+        in_flight = !fields[5].GetCppString().empty();
 
-    delete result;
+        delete result;
+    }
     return true;
 }
 
@@ -17161,6 +17190,9 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature* npc 
         m_taxi.ClearTaxiDestinations();
         return false;
     }
+
+    // Remove pvp flag when starting a flight
+    UpdatePvP(false);
 
     //Checks and preparations done, DO FLIGHT
     ModifyMoney(-(int32)totalcost);

@@ -21,6 +21,7 @@
 
 #include "Common.h"
 #include "Database/DatabaseEnv.h"
+#include "Database/DatabaseImpl.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include "World.h"
@@ -59,6 +60,7 @@
 #include "CreatureEventAIMgr.h"
 #include "QuestDef.h"
 #include "Anticheat.h"
+#include "AsyncCommandHandlers.h"
 
 bool ChatHandler::HandleReloadAllCommand(char* /*args*/)
 {
@@ -193,7 +195,6 @@ bool ChatHandler::HandleReloadAllLocalesCommand(char* /*args*/)
     HandleReloadLocalesGameobjectCommand((char*)"a");
     HandleReloadLocalesGossipMenuOptionCommand((char*)"a");
     HandleReloadLocalesItemCommand((char*)"a");
-    HandleReloadLocalesNpcTextCommand((char*)"a");
     HandleReloadLocalesPageTextCommand((char*)"a");
     HandleReloadLocalesPointsOfInterestCommand((char*)"a");
     HandleReloadLocalesQuestCommand((char*)"a");
@@ -435,7 +436,7 @@ bool ChatHandler::HandleReloadNpcGossipCommand(char* /*args*/)
 bool ChatHandler::HandleReloadNpcTextCommand(char* /*args*/)
 {
     sLog.outString("Re-Loading `npc_text` Table!");
-    sObjectMgr.LoadGossipText();
+    sObjectMgr.LoadNPCText();
     SendSysMessage("DB table `npc_text` reloaded.");
     return true;
 }
@@ -833,14 +834,6 @@ bool ChatHandler::HandleReloadLocalesItemCommand(char* /*args*/)
     sLog.outString("Re-Loading Locales Item ... ");
     sObjectMgr.LoadItemLocales();
     SendSysMessage("DB table `locales_item` reloaded.");
-    return true;
-}
-
-bool ChatHandler::HandleReloadLocalesNpcTextCommand(char* /*args*/)
-{
-    sLog.outString("Re-Loading Locales NPC Text ... ");
-    sObjectMgr.LoadGossipTextLocales();
-    SendSysMessage("DB table `locales_npc_text` reloaded.");
     return true;
 }
 
@@ -5297,7 +5290,7 @@ bool ChatHandler::HandleBanAllIPCommand(char* args)
 
     std::string ip = ipStr;
     LoginDatabase.escape_string(ip);
-    QueryResult* result = LoginDatabase.PQuery("SELECT id, username FROM account WHERE id >= %u AND last_ip " _LIKE_ " " _CONCAT3_("'%%'", "'%s'", "'%%'"), minId, ip.c_str());
+    QueryResult* result = LoginDatabase.PQuery("SELECT id, username FROM account WHERE id >= %u AND last_ip " _LIKE_ " " _CONCAT2_("'%s'", "'%%'"), minId, ip.c_str());
     if (!result)
     {
         PSendSysMessage("No account found on IP '%s'", ip.c_str());
@@ -5358,9 +5351,11 @@ bool ChatHandler::HandleBanHelper(BanMode mode, char* args)
 
     uint32 duration_secs = TimeStringToSecs(duration);
 
-    char* reason = ExtractArg(&args);
-    if (!reason)
+    char* cReason = ExtractArg(&args);
+    if (!cReason)
         return false;
+
+    std::string reason(cReason);
 
     switch (mode)
     {
@@ -5386,34 +5381,39 @@ bool ChatHandler::HandleBanHelper(BanMode mode, char* args)
             break;
     }
 
-    switch (sWorld.BanAccount(mode, nameOrIP, duration_secs, reason, m_session ? m_session->GetPlayerName() : ""))
+    sWorld.BanAccount(mode, nameOrIP, duration_secs, reason, m_session ? m_session->GetPlayerName() : "");
+
+    return true;
+}
+
+void ChatHandler::SendBanResult(BanMode mode, BanReturn result, std::string& banTarget, uint32 duration_secs, std::string& reason)
+{
+    switch (result)
     {
         case BAN_SUCCESS:
             if (duration_secs > 0)
-                PSendSysMessage(LANG_BAN_YOUBANNED, nameOrIP.c_str(), secsToTimeString(duration_secs, true).c_str(), reason);
+                PSendSysMessage(LANG_BAN_YOUBANNED, banTarget.c_str(), secsToTimeString(duration_secs, true).c_str(), reason.c_str());
             else
-                PSendSysMessage(LANG_BAN_YOUPERMBANNED, nameOrIP.c_str(), reason);
+                PSendSysMessage(LANG_BAN_YOUPERMBANNED, banTarget.c_str(), reason.c_str());
             break;
         case BAN_SYNTAX_ERROR:
-            return false;
+            return;
         case BAN_NOTFOUND:
             switch (mode)
             {
-                default:
-                    PSendSysMessage(LANG_BAN_NOTFOUND, "account", nameOrIP.c_str());
-                    break;
-                case BAN_CHARACTER:
-                    PSendSysMessage(LANG_BAN_NOTFOUND, "character", nameOrIP.c_str());
-                    break;
-                case BAN_IP:
-                    PSendSysMessage(LANG_BAN_NOTFOUND, "ip", nameOrIP.c_str());
-                    break;
+            default:
+                PSendSysMessage(LANG_BAN_NOTFOUND, "account", banTarget.c_str());
+                break;
+            case BAN_CHARACTER:
+                PSendSysMessage(LANG_BAN_NOTFOUND, "character", banTarget.c_str());
+                break;
+            case BAN_IP:
+                PSendSysMessage(LANG_BAN_NOTFOUND, "ip", banTarget.c_str());
+                break;
             }
             SetSentErrorMessage(true);
-            return false;
+            return;
     }
-
-    return true;
 }
 
 bool ChatHandler::HandleUnBanAccountCommand(char* args)
@@ -5585,7 +5585,7 @@ bool ChatHandler::HandleBanListCharacterCommand(char* args)
 
     std::string filter = cFilter;
     LoginDatabase.escape_string(filter);
-    QueryResult* result = CharacterDatabase.PQuery("SELECT account FROM characters WHERE name " _LIKE_ " " _CONCAT3_("'%%'", "'%s'", "'%%'"), filter.c_str());
+    QueryResult* result = CharacterDatabase.PQuery("SELECT account FROM characters WHERE name " _LIKE_ " " _CONCAT2_("'%s'", "'%%'"), filter.c_str());
     if (!result)
     {
         PSendSysMessage(LANG_BANLIST_NOCHARACTER);
@@ -5613,7 +5613,7 @@ bool ChatHandler::HandleBanListAccountCommand(char* args)
     else
     {
         result = LoginDatabase.PQuery("SELECT account.id, username FROM account, account_banned"
-                                      " WHERE account.id = account_banned.id AND active = 1 AND username " _LIKE_ " " _CONCAT3_("'%%'", "'%s'", "'%%'") " GROUP BY account.id",
+                                      " WHERE account.id = account_banned.id AND active = 1 AND username " _LIKE_ " " _CONCAT2_("'%s'", "'%%'") " GROUP BY account.id",
                                       filter.c_str());
     }
 
@@ -5726,7 +5726,7 @@ bool ChatHandler::HandleBanListIPCommand(char* args)
     else
     {
         result = LoginDatabase.PQuery("SELECT ip,bandate,unbandate,bannedby,banreason FROM ip_banned"
-                                      " WHERE (bandate=unbandate OR unbandate>UNIX_TIMESTAMP()) AND ip " _LIKE_ " " _CONCAT3_("'%%'", "'%s'", "'%%'")
+                                      " WHERE (bandate=unbandate OR unbandate>UNIX_TIMESTAMP()) AND ip " _LIKE_ " " _CONCAT2_("'%s'", "'%%'")
                                       " ORDER BY unbandate", filter.c_str());
     }
 
@@ -6523,75 +6523,6 @@ bool ChatHandler::HandleServerSetMotdCommand(char* args)
     return true;
 }
 
-bool ChatHandler::ShowPlayerListHelper(QueryResult* result, uint32* limit, bool title, bool error)
-{
-    if (!result)
-    {
-        if (error)
-        {
-            PSendSysMessage(LANG_NO_PLAYERS_FOUND);
-            SetSentErrorMessage(true);
-        }
-        return false;
-    }
-
-    if (!m_session && title)
-    {
-        SendSysMessage(LANG_CHARACTERS_LIST_BAR);
-        SendSysMessage(LANG_CHARACTERS_LIST_HEADER);
-        SendSysMessage(LANG_CHARACTERS_LIST_BAR);
-    }
-
-    if (result)
-    {
-        ///- Circle through them. Display username and GM level
-        do
-        {
-            // check limit
-            if (limit)
-            {
-                if (*limit == 0)
-                    break;
-                --*limit;
-            }
-
-            Field *fields = result->Fetch();
-            uint32 guid      = fields[0].GetUInt32();
-            std::string name = fields[1].GetCppString();
-            uint8 race       = fields[2].GetUInt8();
-            uint8 class_     = fields[3].GetUInt8();
-            uint32 level     = fields[4].GetUInt32();
-
-            ChrRacesEntry const* raceEntry = sChrRacesStore.LookupEntry(race);
-            ChrClassesEntry const* classEntry = sChrClassesStore.LookupEntry(class_);
-
-            char const* race_name = raceEntry   ? raceEntry->name[GetSessionDbcLocale()] : "<?>";
-            char const* class_name = classEntry ? classEntry->name[GetSessionDbcLocale()] : "<?>";
-
-            if (!m_session)
-            {
-                if (sObjectAccessor.FindPlayerNotInWorld(ObjectGuid(HIGHGUID_PLAYER, guid)))
-                    name = "*" + name;
-                PSendSysMessage(LANG_CHARACTERS_LIST_LINE_CONSOLE, guid, name.c_str(), race_name, class_name, level);
-            }
-            else if (sObjectAccessor.FindPlayerNotInWorld(ObjectGuid(HIGHGUID_PLAYER, guid)))
-                PSendSysMessage(LANG_CHARACTERS_LIST_LINE_CHAT_ONLINE, guid, name.c_str(), name.c_str(), race_name, class_name, level);
-            else
-                PSendSysMessage(LANG_CHARACTERS_LIST_LINE_CHAT, guid, name.c_str(), name.c_str(), race_name, class_name, level);
-
-        }
-        while (result->NextRow());
-
-        delete result;
-    }
-
-    if (!m_session)
-        SendSysMessage(LANG_CHARACTERS_LIST_BAR);
-
-    return true;
-}
-
-
 /// Output list of character for account
 bool ChatHandler::HandleAccountCharactersCommand(char* args)
 {
@@ -6603,9 +6534,12 @@ bool ChatHandler::HandleAccountCharactersCommand(char* args)
         return false;
 
     ///- Get the characters for account id
-    QueryResult *result = CharacterDatabase.PQuery("SELECT guid, name, race, class, level FROM characters WHERE account = %u", account_id);
+    CharacterDatabase.AsyncPQuery(&PlayerSearchHandler::HandlePlayerCharacterLookupResult,
+        GetAccountId(), 100u,
+        "SELECT guid, name, race, class, level FROM characters WHERE account = %u",
+        account_id);
 
-    return ShowPlayerListHelper(result);
+    return true;
 }
 
 /// Set/Unset the expansion level for an account
